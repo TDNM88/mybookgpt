@@ -4,31 +4,37 @@ import streamlit as st
 import json
 from io import StringIO, BytesIO
 
-# Lấy API key từ Streamlit secrets
+## Lấy API key từ Streamlit secrets
 openai.api_key = st.secrets["openai"]["api_key"]
 groqapi.api_key = st.secrets["groq"]["api_key"]
 
-# Hàm sử dụng GPT-4o mini để tạo outline
+# Hàm sử dụng GPT-4 để tạo outline
 def generate_outline(book_topic, writing_requirements, style_requirements, reference_info):
     outline_prompt = f"Create a book outline about {book_topic}. Consider the following requirements:\n{writing_requirements}\n{style_requirements}\n{reference_info}"
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=outline_prompt,
+    response = openai.ChatCompletion.create(
+        model="gpt-4",  # Sử dụng đúng model GPT-4
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": outline_prompt}
+        ],
         max_tokens=1000,
         temperature=0.7,
     )
-    return response.choices[0].text.strip()
+    return response['choices'][0]['message']['content'].strip()
 
-# Hàm sử dụng GPT-4o mini để tạo nội dung từng phần
+# Hàm sử dụng GPT-4 để tạo nội dung từng phần
 def generate_chapter_content(chapter, writing_requirements, style_requirements, reference_info):
     content_prompt = f"Write a detailed chapter for a book about {chapter}. Consider the following requirements:\n{writing_requirements}\n{style_requirements}\n{reference_info}"
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=content_prompt,
+    response = openai.ChatCompletion.create(
+        model="gpt-4",  # Sử dụng đúng model GPT-4
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": content_prompt}
+        ],
         max_tokens=1500,
         temperature=0.7,
     )
-    return response.choices[0].text.strip()
+    return response['choices'][0]['message']['content'].strip()
 
 # Hàm sử dụng Groq API để kết hợp nội dung
 def combine_and_extend_content(chapter_contents):
