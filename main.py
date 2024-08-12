@@ -1,20 +1,25 @@
 import openai
-import groq
 import streamlit as st
 import json
 from io import StringIO, BytesIO
+import groqapi
 
-## Lấy API key từ Streamlit secrets
+# Lấy API key từ Streamlit secrets
 openai.api_key = st.secrets["openai"]["api_key"]
-groq.api_key = st.secrets["groq"]["api_key"]
+groqapi.api_key = st.secrets["groq"]["api_key"]
 
-# Hàm sử dụng GPT-4 để tạo outline
+# Hàm sử dụng GPT-4 để tạo outline bằng tiếng Việt
 def generate_outline(book_topic, writing_requirements, style_requirements, reference_info):
-    outline_prompt = f"Create a book outline about {book_topic}. Consider the following requirements:\n{writing_requirements}\n{style_requirements}\n{reference_info}"
+    outline_prompt = (
+        f"Bạn là một trợ lý thông minh và hỗ trợ viết sách. "
+        f"Xin hãy tạo một dàn ý sách chi tiết bằng tiếng Việt về chủ đề '{book_topic}', "
+        f"xem xét các yêu cầu sau đây:\nYêu cầu về cách viết: {writing_requirements}\n"
+        f"Yêu cầu về văn phong: {style_requirements}\nThông tin tham khảo: {reference_info}"
+    )
     response = openai.ChatCompletion.create(
-        model="gpt-4",  # Sử dụng đúng model GPT-4
+        model="gpt-4",
         messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "system", "content": "Bạn là một trợ lý chuyên nghiệp, nhiệm vụ của bạn là giúp người dùng viết sách bằng tiếng Việt."},
             {"role": "user", "content": outline_prompt}
         ],
         max_tokens=1000,
@@ -22,13 +27,17 @@ def generate_outline(book_topic, writing_requirements, style_requirements, refer
     )
     return response['choices'][0]['message']['content'].strip()
 
-# Hàm sử dụng GPT-4 để tạo nội dung từng phần
+# Hàm sử dụng GPT-4 để tạo nội dung từng chương bằng tiếng Việt
 def generate_chapter_content(chapter, writing_requirements, style_requirements, reference_info):
-    content_prompt = f"Write a detailed chapter for a book about {chapter}. Consider the following requirements:\n{writing_requirements}\n{style_requirements}\n{reference_info}"
+    content_prompt = (
+        f"Viết một chương chi tiết cho cuốn sách về '{chapter}' bằng tiếng Việt, "
+        f"xem xét các yêu cầu sau đây:\nYêu cầu về cách viết: {writing_requirements}\n"
+        f"Yêu cầu về văn phong: {style_requirements}\nThông tin tham khảo: {reference_info}"
+    )
     response = openai.ChatCompletion.create(
-        model="gpt-4",  # Sử dụng đúng model GPT-4
+        model="gpt-4",
         messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "system", "content": "Bạn là một trợ lý chuyên nghiệp, nhiệm vụ của bạn là giúp người dùng viết sách bằng tiếng Việt."},
             {"role": "user", "content": content_prompt}
         ],
         max_tokens=1500,
@@ -36,8 +45,9 @@ def generate_chapter_content(chapter, writing_requirements, style_requirements, 
     )
     return response['choices'][0]['message']['content'].strip()
 
-# Hàm sử dụng Groq API để kết hợp nội dung
+# Hàm sử dụng Groq API để kết hợp và mở rộng nội dung
 def combine_and_extend_content(chapter_contents):
+    # Giả định rằng có các hàm combine_texts và extend_text trong Groq API
     combined_content = groqapi.combine_texts(chapter_contents)
     extended_content = groqapi.extend_text(combined_content)
     return extended_content
