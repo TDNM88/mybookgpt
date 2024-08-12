@@ -11,11 +11,8 @@ groq_api_key = st.secrets["groq"]["api_key"] if "groq" in st.secrets else os.get
 client = Groq(api_key=groq_api_key)
 
 # Khởi tạo session state nếu chưa có
-if "book_structure" not in st.session_state:
-    st.session_state["book_structure"] = None
-
-if "book_title" not in st.session_state:
-    st.session_state["book_title"] = None
+if "book_outline" not in st.session_state:
+    st.session_state["book_outline"] = None
 
 if "book_content" not in st.session_state:
     st.session_state["book_content"] = ""
@@ -25,30 +22,17 @@ def read_uploaded_files(uploaded_files):
         combined_content += file.read().decode("utf-8") + "\n"
     return combined_content
 
-def generate_book_structure(topic_text, additional_instructions_prompt, model, groq_provider):
+def generate_book_outline(topic_text, additional_instructions_prompt, model, groq_provider):
     try:
         response = client.chat.completions.create(
-            messages=[{"role": "user", "content": topic_text + "\n" + additional_instructions_prompt}],
+            messages=[{"role": "user", "content": f"Tạo outline và tiêu đề cho cuốn sách về: {topic_text}\n{additional_instructions_prompt}"}],
             model=model,
-            max_tokens=1500,
+            max_tokens=2000,
             temperature=0.7,
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        st.error(f"Lỗi khi tạo cấu trúc sách: {str(e)}")
-        return None
-
-def generate_book_title(topic_text, model, groq_provider):
-    try:
-        response = client.chat.completions.create(
-            messages=[{"role": "user", "content": "Hãy tạo một tiêu đề cho cuốn sách về: " + topic_text}],
-            model=model,
-            max_tokens=100,
-            temperature=0.7,
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        st.error(f"Lỗi khi tạo tiêu đề sách: {str(e)}")
+        st.error(f"Lỗi khi tạo outline và tiêu đề sách: {str(e)}")
         return None
 
 def generate_chapter_content(title, content, additional_instructions_prompt, model, groq_provider):
@@ -101,8 +85,8 @@ def main():
     seed_content = read_uploaded_files(uploaded_files) if uploaded_files else ""
     reference_content = read_uploaded_files(reference_files) if reference_files else ""
 
-    # Tạo cấu trúc sách
-    if st.button("Tạo Cấu Trúc Sách"):
+    # Tạo outline và tiêu đề sách
+    if st.button("Tạo Outline và Tiêu Đề Sách"):
         if len(book_topic) < 10:
             st.error("Chủ đề cuốn sách phải có ít nhất 10 ký tự.")
         else:
@@ -116,35 +100,25 @@ def main():
             if reference_content:
                 additional_instructions_prompt += f"\nThông tin tham khảo: {reference_content}"
 
-            st.session_state["book_structure"] = generate_book_structure(
+            # Tạo outline và tiêu đề sách
+            st.session_state["book_outline"] = generate_book_outline(
                 book_topic,
                 additional_instructions_prompt,
                 model="llama3-70b-8192",
                 groq_provider=groq_api_key
             )
-            if st.session_state["book_structure"]:
-                st.write("### Cấu Trúc Sách Được Đề Xuất")
-                st.text(st.session_state["book_structure"])
-
-    # Tạo tiêu đề sách
-    if st.session_state["book_structure"] and st.button("Đồng ý Cấu Trúc và Tạo Tiêu Đề"):
-        st.session_state["book_title"] = generate_book_title(
-            book_topic,
-            model="llama3-70b-8192",
-            groq_provider=groq_api_key
-        )
-        if st.session_state["book_title"]:
-            st.write("### Tiêu Đề Sách Đã Tạo:")
-            st.write(f"## {st.session_state['book_title']}")
+            if st.session_state["book_outline"]:
+                st.write("### Outline và Tiêu Đề Sách Được Đề Xuất")
+                st.text(st.session_state["book_outline"])
 
     # Tạo nội dung các chương
-    if st.session_state["book_title"] and st.button("Đồng ý Tiêu Đề và Tạo Nội Dung Các Chương"):
+    if st.session_state["book_outline"] and st.button("Đồng ý với Outline và Tạo Nội Dung Các Chương"):
         st.write("### Đang tạo nội dung cho các chương...")
-        book_structure_json = json.loads(st.session_state["book_structure"])
-        for chapter in book_structure_json.keys():
+        book_outline_json = json.loads(st.session_state["book_outline"])
+        for chapter in book_outline_json.keys():
             chapter_content = generate_chapter_content(
                 title=chapter,
-                content=book_structure_json[chapter],
+                content=book_outline_json[chapter],
                 additional_instructions_prompt=additional_instructions_prompt,
                 model="llama3-70b-8192",
                 groq_provider=groq_api_key
@@ -159,8 +133,8 @@ def main():
             # Tải xuống nội dung cuốn sách
             if st.button("Tải Xuống Cuốn Sách"):
                 txt_stream = StringIO(st.session_state["book_content"])
-                docx_stream = save_to_docx(st.session_state["book_content"], title=st.session_state["book_title"])
-                pdf_stream = save_to_pdf(st.session_state["book_content"], title=st.session_state["book_title"])
+                docx_stream = save_to_docx(st.session_state["book_content"], title=book_topic)
+                pdf_stream = save_to_pdf(st.session_state["book_content"], title=book_topic)
 
                 st.download_button(
                     label="Tải xuống dưới dạng TXT",
