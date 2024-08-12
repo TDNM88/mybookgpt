@@ -1,194 +1,161 @@
-import openai
 import streamlit as st
 import json
-from io import StringIO, BytesIO
-import groq
+import os
+from io import BytesIO
+from groq import Groq
+from fpdf import FPDF
+from docx import Document
 
-# Lấy API key từ Streamlit secrets
-openai.api_key = st.secrets["openai"]["api_key"]
-groq.api_key = st.secrets["groq"]["api_key"]
+# Lấy API key từ môi trường hoặc Streamlit secrets
+groq_api_key = st.secrets["groq"]["api_key"] if "groq" in st.secrets else os.getenv("GROQ_API_KEY")
+client = Groq(api_key=groq_api_key)
 
-# Hàm sử dụng GPT-4 để tạo outline bằng tiếng Việt
-def generate_outline(book_topic, writing_requirements, style_requirements, reference_info):
-    outline_prompt = (
-        f"Bạn là một trợ lý thông minh và hỗ trợ viết sách. "
-        f"Xin hãy tạo một dàn ý sách chi tiết bằng tiếng Việt về chủ đề '{book_topic}', "
-        f"xem xét các yêu cầu sau đây:\nYêu cầu về cách viết: {writing_requirements}\n"
-        f"Yêu cầu về văn phong: {style_requirements}\nThông tin tham khảo: {reference_info}"
-    )
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "Bạn là một trợ lý chuyên nghiệp, nhiệm vụ của bạn là giúp người dùng viết sách bằng tiếng Việt."},
-            {"role": "user", "content": outline_prompt}
-        ],
-        max_tokens=1000,
-        temperature=0.7,
-    )
-    return response['choices'][0]['message']['content'].strip()
+def read_uploaded_files(uploaded_files):
+    combined_content = ""
+    for file in uploaded_files:
+        combined_content += file.read().decode("utf-8") + "\n"
+    return combined_content
 
-# Hàm sử dụng GPT-4 để tạo nội dung từng chương bằng tiếng Việt
-def generate_chapter_content(chapter, writing_requirements, style_requirements, reference_info):
-    content_prompt = (
-        f"Viết một chương chi tiết cho cuốn sách về '{chapter}' bằng tiếng Việt, "
-        f"xem xét các yêu cầu sau đây:\nYêu cầu về cách viết: {writing_requirements}\n"
-        f"Yêu cầu về văn phong: {style_requirements}\nThông tin tham khảo: {reference_info}"
-    )
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "Bạn là một trợ lý chuyên nghiệp, nhiệm vụ của bạn là giúp người dùng viết sách bằng tiếng Việt."},
-            {"role": "user", "content": content_prompt}
-        ],
+def generate_book_structure(topic_text, additional_instructions_prompt, model, groq_provider):
+    response = client.chat.completions.create(
+        messages=[{"role": "user", "content": topic_text + "\n" + additional_instructions_prompt}],
+        model=model,
         max_tokens=1500,
         temperature=0.7,
     )
-    return response['choices'][0]['message']['content'].strip()
+    return response.choices[0].message.content.strip()
 
-# Hàm sử dụng Groq API để kết hợp và mở rộng nội dung
-def combine_and_extend_content(chapter_contents):
-    # Giả định rằng Groq API có các hàm combine_texts và extend_text
-    combined_content = groq.combine_texts(chapter_contents)
-    extended_content = groq.extend_text(combined_content)
-    return extended_content
+def generate_book_title(topic_text, model, groq_provider):
+    response = client.chat.completions.create(
+        messages=[{"role": "user", "content": "Hãy tạo một tiêu đề cho cuốn sách về: " + topic_text}],
+        model=model,
+        max_tokens=100,
+        temperature=0.7,
+    )
+    return response.choices[0].message.content.strip()
 
-# Hàm tạo file PDF, DOCX hoặc TXT từ nội dung đã tạo
-def save_content_to_file(content, file_format):
-    if file_format == "TXT":
-        return content.encode('utf-8')
-    elif file_format == "DOCX":
-        from io import BytesIO
-        from docx import Document
-        doc = Document()
-        doc.add_paragraph(content)
-        bio = BytesIO()
-        doc.save(bio)
-        bio.seek(0)
-        return bio
-    elif file_format == "PDF":
-        from fpdf import FPDF
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_auto_page_break(auto=True, margin=15)
-        pdf.set_font("Arial", size=12)
-        for line in content.split("\n"):
-            pdf.multi_cell(0, 10, line)
-        bio = BytesIO()
-        pdf.output(bio)
-        bio.seek(0)
-        return bio
+def generate_chapter_content(title, content, additional_instructions_prompt, model, groq_provider):
+    response = client.chat.completions.create(
+        messages=[{"role": "user", "content": title + ": " + content + "\n" + additional_instructions_prompt}],
+        model=model,
+        max_tokens=2000,
+        temperature=0.7,
+    )
+    return response.choices[0].message.content.strip()
 
-# Hàm lưu metadata thành file JSON
-def save_metadata_to_file(metadata):
-    bio = BytesIO()
-    bio.write(json.dumps(metadata).encode('utf-8'))
-    bio.seek(0)
-    return bio
+def save_to_docx(content, title="Cuốn Sách"):
+    doc = Document()
+    doc.add_heading(title, 0)
+    doc.add_paragraph(content)
+    file_stream = BytesIO()
+    doc.save(file_stream)
+    file_stream.seek(0)
+    return file_stream
 
-# Hàm tải metadata từ file JSON
-def load_metadata_from_file(uploaded_file):
-    stringio = StringIO(uploaded_file.getvalue().decode("utf-8"))
-    return json.load(stringio)
+def save_to_pdf(content, title="Cuốn Sách"):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.multi_cell(0, 10, title)
+    pdf.multi_cell(0, 10, content)
+    file_stream = BytesIO()
+    pdf.output(file_stream)
+    file_stream.seek(0)
+    return file_stream
 
 # Streamlit UI
 def main():
     st.set_page_config(page_title="AI Book Writer", layout="wide")
 
-    # Giao diện sáng/tối
-    st.sidebar.title("Tùy chọn giao diện")
-    theme = st.sidebar.radio("Chọn giao diện:", options=["Sáng", "Tối"])
-    
-    if theme == "Tối":
-        st.markdown("""
-            <style>
-            body {background-color: #1e1e1e; color: white;}
-            .stTextInput, .stTextArea, .stSelectbox {color: white;}
-            </style>
-        """, unsafe_allow_html=True)
-
     st.title("AI Book Writer")
     st.write("Tạo sách tự động theo yêu cầu của bạn.")
 
-    metadata = None
-    if 'saved_metadata' not in st.session_state:
-        st.session_state['saved_metadata'] = None
+    # Nhập thông tin từ người dùng
+    book_topic = st.text_input("Chủ đề của cuốn sách:")
+    writing_requirements = st.text_area("Yêu cầu về cách viết:")
+    style_requirements = st.text_area("Yêu cầu về văn phong:")
+    additional_instructions = st.text_area("Thông tin bổ sung:")
 
-    # Tải metadata nếu có
-    uploaded_file = st.file_uploader("Tải lên tệp metadata (JSON) để tiếp tục dự án trước:")
-    if uploaded_file is not None:
-        metadata = load_metadata_from_file(uploaded_file)
-        st.session_state['saved_metadata'] = metadata
-
-    # Sử dụng metadata đã tải nếu có
-    if st.session_state['saved_metadata'] is not None:
-        metadata = st.session_state['saved_metadata']
-        book_topic = metadata['book_topic']
-        writing_requirements = metadata['writing_requirements']
-        style_requirements = metadata['style_requirements']
-        reference_info = metadata['reference_info']
-        outline = metadata['outline']
-        chapter_contents = metadata['chapter_contents']
-        st.success("Đã tải thành công dự án trước đó.")
+    uploaded_files = st.file_uploader("Tải lên các tệp văn bản", accept_multiple_files=True)
+    
+    if uploaded_files:
+        seed_content = read_uploaded_files(uploaded_files)
     else:
-        book_topic = st.text_input("Chủ đề của cuốn sách:")
-        writing_requirements = st.text_area("Yêu cầu về cách viết:")
-        style_requirements = st.text_area("Yêu cầu về văn phong:")
-        reference_info = st.text_area("Thông tin tham khảo (nếu có):")
-        outline = None
-        chapter_contents = []
+        seed_content = ""
 
-    if st.button("Đề xuất Outline"):
-        with st.spinner("Đang tạo đề xuất outline..."):
-            outline = generate_outline(book_topic, writing_requirements, style_requirements, reference_info)
-            st.session_state['saved_metadata'] = {
-                'book_topic': book_topic,
-                'writing_requirements': writing_requirements,
-                'style_requirements': style_requirements,
-                'reference_info': reference_info,
-                'outline': outline,
-                'chapter_contents': chapter_contents
-            }
-            st.subheader("Outline được đề xuất:")
-            st.write(outline)
+    if st.button("Tạo Cấu Trúc Sách"):
+        if len(book_topic) < 10:
+            st.error("Chủ đề cuốn sách phải có ít nhất 10 ký tự.")
+        else:
+            additional_instructions_prompt = (
+                additional_instructions
+                + f"\nWriting Style: {style_requirements}\n"
+                + f"Complexity Level: {writing_requirements}\n"
+            )
+            if seed_content:
+                additional_instructions_prompt += f"\nNội dung gợi ý: {seed_content}"
 
-    if outline and st.button("Đồng ý Outline và Bắt đầu Viết"):
-        st.header("Bước 2: Viết Nội Dung Sách")
-        st.write("Ứng dụng sẽ tạo nội dung chi tiết cho từng chương dựa trên outline đã được đồng ý.")
+            # Tạo cấu trúc sách
+            book_structure = generate_book_structure(
+                book_topic,
+                additional_instructions_prompt,
+                model="llama3-70b-8192",
+                groq_provider=groq_api_key
+            )
+            st.write("### Cấu Trúc Sách Được Đề Xuất")
+            st.text(book_structure)
 
-        chapters = [chapter.strip() for chapter in outline.split("\n") if chapter.strip()]
-        
-        for chapter in chapters:
-            if st.button(f"Viết nội dung chương: {chapter}"):
-                content = generate_chapter_content(chapter, writing_requirements, style_requirements, reference_info)
-                chapter_contents.append(content)
-                st.session_state['saved_metadata']['chapter_contents'] = chapter_contents
-                with st.beta_expander(f"Nội dung chương {chapter}"):
-                    st.text_area("", value=content, height=200)
+            # Tạo tiêu đề sách
+            if st.button("Đồng ý Cấu Trúc và Tạo Tiêu Đề"):
+                book_title = generate_book_title(
+                    book_topic,
+                    model="llama3-70b-8192",
+                    groq_provider=groq_api_key
+                )
+                st.write(f"## Tiêu Đề Sách: {book_title}")
 
-    if chapter_contents:
-        if st.button("Kết hợp và Mở rộng Nội dung"):
-            with st.spinner("Đang kết hợp và mở rộng nội dung..."):
-                full_book_content = combine_and_extend_content(chapter_contents)
-                st.text_area("Nội dung sách đã viết:", value=full_book_content, height=400)
+                # Tạo nội dung các chương
+                if st.button("Đồng ý Tiêu Đề và Tạo Nội Dung Các Chương"):
+                    st.write("### Đang tạo nội dung cho các chương...")
+                    book_structure_json = json.loads(book_structure)
+                    book_content = ""
+                    for chapter in book_structure_json.keys():
+                        chapter_content = generate_chapter_content(
+                            title=chapter,
+                            content=book_structure_json[chapter],
+                            additional_instructions_prompt=additional_instructions_prompt,
+                            model="llama3-70b-8192",
+                            groq_provider=groq_api_key
+                        )
+                        book_content += f"{chapter}\n\n{chapter_content}\n\n"
 
-    # Tải xuống metadata
-    if st.button("Tải xuống Metadata"):
-        if st.session_state['saved_metadata']:
-            metadata_file = save_metadata_to_file(st.session_state['saved_metadata'])
-            st.download_button(label="Tải xuống tệp Metadata (JSON)", data=metadata_file, file_name="project_metadata.json", mime="application/json")
+                    st.write("### Nội Dung Cuốn Sách")
+                    st.text(book_content)
 
-    # Lưu nội dung thành file
-    if chapter_contents and st.button("Lưu và Tải Xuống"):
-        st.header("Lưu và Tải Xuống")
-        file_format = st.selectbox("Chọn định dạng tệp để lưu:", ("TXT", "DOCX", "PDF"))
-        if full_book_content:
-            file_data = save_content_to_file(full_book_content, file_format)
-            if file_format == "TXT":
-                st.download_button(label="Tải xuống tệp TXT", data=file_data, file_name="generated_book.txt", mime="text/plain")
-            elif file_format == "DOCX":
-                st.download_button(label="Tải xuống tệp DOCX", data=file_data, file_name="generated_book.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-            elif file_format == "PDF":
-                st.download_button(label="Tải xuống tệp PDF", data=file_data, file_name="generated_book.pdf", mime="application/pdf")
+                    # Tải xuống nội dung cuốn sách
+                    if st.button("Tải Xuống Cuốn Sách"):
+                        txt_stream = StringIO(book_content)
+                        docx_stream = save_to_docx(book_content, title=book_title)
+                        pdf_stream = save_to_pdf(book_content, title=book_title)
+
+                        st.download_button(
+                            label="Tải xuống dưới dạng TXT",
+                            data=txt_stream.getvalue(),
+                            file_name="cuon_sach.txt",
+                            mime="text/plain",
+                        )
+                        st.download_button(
+                            label="Tải xuống dưới dạng DOCX",
+                            data=docx_stream,
+                            file_name="cuon_sach.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        )
+                        st.download_button(
+                            label="Tải xuống dưới dạng PDF",
+                            data=pdf_stream,
+                            file_name="cuon_sach.pdf",
+                            mime="application/pdf",
+                        )
 
 if __name__ == "__main__":
     main()
