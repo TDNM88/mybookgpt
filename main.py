@@ -2,11 +2,11 @@ import openai
 import streamlit as st
 import json
 from io import StringIO, BytesIO
-import groqapi
+import groq
 
 # Lấy API key từ Streamlit secrets
 openai.api_key = st.secrets["openai"]["api_key"]
-groqapi.api_key = st.secrets["groq"]["api_key"]
+groq.api_key = st.secrets["groq"]["api_key"]
 
 # Hàm sử dụng GPT-4 để tạo outline bằng tiếng Việt
 def generate_outline(book_topic, writing_requirements, style_requirements, reference_info):
