@@ -72,16 +72,15 @@ def main():
 
     # Nhập thông tin từ người dùng
     book_topic = st.text_input("Chủ đề của cuốn sách:")
-    writing_requirements = st.text_area("Yêu cầu về cách viết:")
+    writing_requirements = st.text_area("Yêu cầu về nội dung:")
     style_requirements = st.text_area("Yêu cầu về văn phong:")
     additional_instructions = st.text_area("Thông tin bổ sung:")
 
     uploaded_files = st.file_uploader("Tải lên các tệp văn bản", accept_multiple_files=True)
+    reference_files = st.file_uploader("Tải lên các tệp tham khảo", accept_multiple_files=True)
     
-    if uploaded_files:
-        seed_content = read_uploaded_files(uploaded_files)
-    else:
-        seed_content = ""
+    seed_content = read_uploaded_files(uploaded_files) if uploaded_files else ""
+    reference_content = read_uploaded_files(reference_files) if reference_files else ""
 
     if st.button("Tạo Cấu Trúc Sách"):
         if len(book_topic) < 10:
@@ -94,6 +93,8 @@ def main():
             )
             if seed_content:
                 additional_instructions_prompt += f"\nNội dung gợi ý: {seed_content}"
+            if reference_content:
+                additional_instructions_prompt += f"\nThông tin tham khảo: {reference_content}"
 
             # Tạo cấu trúc sách
             book_structure = generate_book_structure(
