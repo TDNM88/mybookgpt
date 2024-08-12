@@ -2,7 +2,7 @@ import openai
 import streamlit as st
 import json
 from io import StringIO, BytesIO
-import groq
+import groq  # Updated to use the correct package
 
 # Lấy API key từ Streamlit secrets
 openai.api_key = st.secrets["openai"]["api_key"]
@@ -25,7 +25,7 @@ def generate_outline(book_topic, writing_requirements, style_requirements, refer
         max_tokens=1000,
         temperature=0.7,
     )
-    return response['choices'][0]['message']['content'].strip()
+    return response.choices[0].message['content'].strip()
 
 # Hàm sử dụng GPT-4 để tạo nội dung từng chương bằng tiếng Việt
 def generate_chapter_content(chapter, writing_requirements, style_requirements, reference_info):
@@ -43,13 +43,13 @@ def generate_chapter_content(chapter, writing_requirements, style_requirements, 
         max_tokens=1500,
         temperature=0.7,
     )
-    return response['choices'][0]['message']['content'].strip()
+    return response.choices[0].message['content'].strip()
 
 # Hàm sử dụng Groq API để kết hợp và mở rộng nội dung
 def combine_and_extend_content(chapter_contents):
-    # Giả định rằng có các hàm combine_texts và extend_text trong Groq API
-    combined_content = groqapi.combine_texts(chapter_contents)
-    extended_content = groqapi.extend_text(combined_content)
+    # Giả định rằng Groq API có các hàm combine_texts và extend_text
+    combined_content = groq.combine_texts(chapter_contents)
+    extended_content = groq.extend_text(combined_content)
     return extended_content
 
 # Hàm tạo file PDF, DOCX hoặc TXT từ nội dung đã tạo
