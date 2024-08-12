@@ -17,31 +17,43 @@ def read_uploaded_files(uploaded_files):
     return combined_content
 
 def generate_book_structure(topic_text, additional_instructions_prompt, model, groq_provider):
-    response = client.chat.completions.create(
-        messages=[{"role": "user", "content": topic_text + "\n" + additional_instructions_prompt}],
-        model=model,
-        max_tokens=1500,
-        temperature=0.7,
-    )
-    return response.choices[0].message.content.strip()
+    try:
+        response = client.chat.completions.create(
+            messages=[{"role": "user", "content": topic_text + "\n" + additional_instructions_prompt}],
+            model=model,
+            max_tokens=1500,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        st.error(f"Lỗi khi tạo cấu trúc sách: {str(e)}")
+        return None
 
 def generate_book_title(topic_text, model, groq_provider):
-    response = client.chat.completions.create(
-        messages=[{"role": "user", "content": "Hãy tạo một tiêu đề cho cuốn sách về: " + topic_text}],
-        model=model,
-        max_tokens=100,
-        temperature=0.7,
-    )
-    return response.choices[0].message.content.strip()
+    try:
+        response = client.chat.completions.create(
+            messages=[{"role": "user", "content": "Hãy tạo một tiêu đề cho cuốn sách về: " + topic_text}],
+            model=model,
+            max_tokens=100,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        st.error(f"Lỗi khi tạo tiêu đề sách: {str(e)}")
+        return None
 
 def generate_chapter_content(title, content, additional_instructions_prompt, model, groq_provider):
-    response = client.chat.completions.create(
-        messages=[{"role": "user", "content": title + ": " + content + "\n" + additional_instructions_prompt}],
-        model=model,
-        max_tokens=2000,
-        temperature=0.7,
-    )
-    return response.choices[0].message.content.strip()
+    try:
+        response = client.chat.completions.create(
+            messages=[{"role": "user", "content": title + ": " + content + "\n" + additional_instructions_prompt}],
+            model=model,
+            max_tokens=2000,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        st.error(f"Lỗi khi tạo nội dung chương: {str(e)}")
+        return None
 
 def save_to_docx(content, title="Cuốn Sách"):
     doc = Document()
@@ -72,7 +84,7 @@ def main():
 
     # Nhập thông tin từ người dùng
     book_topic = st.text_input("Chủ đề của cuốn sách:")
-    writing_requirements = st.text_area("Yêu cầu về nội dung:")
+    writing_requirements = st.text_area("Yêu cầu về cách viết:")
     style_requirements = st.text_area("Yêu cầu về văn phong:")
     additional_instructions = st.text_area("Thông tin bổ sung:")
 
@@ -88,8 +100,8 @@ def main():
         else:
             additional_instructions_prompt = (
                 additional_instructions
-                + f"\nWriting Style: {style_requirements}\n"
-                + f"Complexity Level: {writing_requirements}\n"
+                + f"\nPhong cách viết: {style_requirements}\n"
+                + f"Yêu cầu cách viết: {writing_requirements}\n"
             )
             if seed_content:
                 additional_instructions_prompt += f"\nNội dung gợi ý: {seed_content}"
@@ -103,8 +115,9 @@ def main():
                 model="llama3-70b-8192",
                 groq_provider=groq_api_key
             )
-            st.write("### Cấu Trúc Sách Được Đề Xuất")
-            st.text(book_structure)
+            if book_structure:
+                st.write("### Cấu Trúc Sách Được Đề Xuất")
+                st.text(book_structure)
 
             # Tạo tiêu đề sách
             if st.button("Đồng ý Cấu Trúc và Tạo Tiêu Đề"):
@@ -113,50 +126,53 @@ def main():
                     model="llama3-70b-8192",
                     groq_provider=groq_api_key
                 )
-                st.write(f"## Tiêu Đề Sách: {book_title}")
+                if book_title:
+                    st.write("### Kết quả:")
+                    st.write(f"## Tiêu Đề Sách: {book_title}")
 
-                # Tạo nội dung các chương
-                if st.button("Đồng ý Tiêu Đề và Tạo Nội Dung Các Chương"):
-                    st.write("### Đang tạo nội dung cho các chương...")
-                    book_structure_json = json.loads(book_structure)
-                    book_content = ""
-                    for chapter in book_structure_json.keys():
-                        chapter_content = generate_chapter_content(
-                            title=chapter,
-                            content=book_structure_json[chapter],
-                            additional_instructions_prompt=additional_instructions_prompt,
-                            model="llama3-70b-8192",
-                            groq_provider=groq_api_key
-                        )
-                        book_content += f"{chapter}\n\n{chapter_content}\n\n"
+                    # Tạo nội dung các chương
+                    if st.button("Đồng ý Tiêu Đề và Tạo Nội Dung Các Chương"):
+                        st.write("### Đang tạo nội dung cho các chương...")
+                        book_structure_json = json.loads(book_structure)
+                        book_content = ""
+                        for chapter in book_structure_json.keys():
+                            chapter_content = generate_chapter_content(
+                                title=chapter,
+                                content=book_structure_json[chapter],
+                                additional_instructions_prompt=additional_instructions_prompt,
+                                model="llama3-70b-8192",
+                                groq_provider=groq_api_key
+                            )
+                            if chapter_content:
+                                book_content += f"{chapter}\n\n{chapter_content}\n\n"
 
-                    st.write("### Nội Dung Cuốn Sách")
-                    st.text(book_content)
+                        st.write("### Nội Dung Cuốn Sách")
+                        st.text(book_content)
 
-                    # Tải xuống nội dung cuốn sách
-                    if st.button("Tải Xuống Cuốn Sách"):
-                        txt_stream = StringIO(book_content)
-                        docx_stream = save_to_docx(book_content, title=book_title)
-                        pdf_stream = save_to_pdf(book_content, title=book_title)
+                        # Tải xuống nội dung cuốn sách
+                        if st.button("Tải Xuống Cuốn Sách"):
+                            txt_stream = StringIO(book_content)
+                            docx_stream = save_to_docx(book_content, title=book_title)
+                            pdf_stream = save_to_pdf(book_content, title=book_title)
 
-                        st.download_button(
-                            label="Tải xuống dưới dạng TXT",
-                            data=txt_stream.getvalue(),
-                            file_name="cuon_sach.txt",
-                            mime="text/plain",
-                        )
-                        st.download_button(
-                            label="Tải xuống dưới dạng DOCX",
-                            data=docx_stream,
-                            file_name="cuon_sach.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        )
-                        st.download_button(
-                            label="Tải xuống dưới dạng PDF",
-                            data=pdf_stream,
-                            file_name="cuon_sach.pdf",
-                            mime="application/pdf",
-                        )
+                            st.download_button(
+                                label="Tải xuống dưới dạng TXT",
+                                data=txt_stream.getvalue(),
+                                file_name="cuon_sach.txt",
+                                mime="text/plain",
+                            )
+                            st.download_button(
+                                label="Tải xuống dưới dạng DOCX",
+                                data=docx_stream,
+                                file_name="cuon_sach.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            )
+                            st.download_button(
+                                label="Tải xuống dưới dạng PDF",
+                                data=pdf_stream,
+                                file_name="cuon_sach.pdf",
+                                mime="application/pdf",
+                            )
 
 if __name__ == "__main__":
     main()
